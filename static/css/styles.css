@@ -91,6 +91,15 @@ main {
   font-size: 14px;
 }
 
+.breadcrumbs a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.breadcrumbs a:hover {
+  color: var(--primary-dark);
+}
+
 .hero {
   min-height: 390px;
   display: flex;
