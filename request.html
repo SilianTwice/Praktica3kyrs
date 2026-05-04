@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Заявка | Ювелирная мастерская</title>
+    <link rel="stylesheet" href="static/css/styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="index.html" aria-label="Главная страница">
+        <span class="brand-mark">ЮМ</span>
+        <span>
+          <strong>Ювелирная мастерская</strong>
+          <small>изготовление и ремонт ювелирных украшений</small>
+        </span>
+      </a>
+
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="main-nav">
+        Меню
+      </button>
+
+      <nav id="main-nav" class="main-nav" aria-label="Основное меню">
+        <a href="about.html">О мастерской</a>
+        <a href="index.html">Главная</a>
+        <a href="services.html">Услуги</a>
+        <a href="catalog.html">Каталог</a>
+        <a href="portfolio.html">Портфолио</a>
+        <a class="active" href="request.html">Заявка</a>
+        <a href="contacts.html">Контакты</a>
+      </nav>
+    </header>
+
+    <main>
+      <nav class="breadcrumbs" aria-label="Хлебные крошки">
+        <span>Заявка</span>
+      </nav>
+
+      <section class="hero">
+        <div class="hero-text">
+          <h1>Заявка на работу</h1>
+          <p>
+            Форма помогает заранее описать изделие, услугу и удобный способ
+            связи для предварительного обсуждения заказа.
+          </p>
+        </div>
+      </section>
+
+      <section class="section contact-section">
+        <div class="section-heading">
+          <p class="eyebrow">Форма</p>
+          <h2>Оставить заявку</h2>
+        </div>
+
+        <form class="request-form" data-request-form>
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="client-name">Имя</label>
+              <input id="client-name" name="client-name" type="text" required>
+            </div>
+
+            <div class="form-field">
+              <label for="client-contact">Телефон или email</label>
+              <input id="client-contact" name="client-contact" type="text" required>
+            </div>
+
+            <div class="form-field">
+              <label for="service-type">Тип услуги</label>
+              <select id="service-type" name="service-type">
+                <option>Изготовление украшения</option>
+                <option>Ремонт изделия</option>
+                <option>Полировка и чистка</option>
+                <option>Консультация</option>
+              </select>
+            </div>
+
+            <div class="form-field">
+              <label for="budget">Ориентировочный бюджет</label>
+              <input id="budget" name="budget" type="text" placeholder="например, до 10 000 руб.">
+            </div>
+
+            <div class="form-field form-field-wide">
+              <label for="comment">Описание задачи</label>
+              <textarea id="comment" name="comment" placeholder="Опишите изделие, материал, размер или характер ремонта"></textarea>
+            </div>
+          </div>
+
+          <button class="primary-button" type="submit">Отправить заявку</button>
+          <p class="form-note" data-form-result>Сейчас форма работает как статический пример без отправки на сервер.</p>
+        </form>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="footer-inner">
+        <span>Калинин Александр Сергеевич</span>
+        <div class="footer-links" aria-label="Дополнительная навигация">
+          <a href="prices.html">Цены</a>
+          <a href="materials.html">Материалы</a>
+          <a href="warranty.html">Гарантия</a>
+          <a href="care.html">Уход</a>
+          <a href="faq.html">FAQ</a>
+        </div>
+      </div>
+    </footer>
+
+    <script src="static/js/main.js"></script>
+  </body>
+</html>

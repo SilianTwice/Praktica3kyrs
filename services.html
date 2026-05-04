@@ -16,13 +16,17 @@
         </span>
       </a>
 
-      <nav class="main-nav" aria-label="Основное меню">
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="main-nav">
+        Меню
+      </button>
+
+      <nav id="main-nav" class="main-nav" aria-label="Основное меню">
         <a href="about.html">О мастерской</a>
         <a href="index.html">Главная</a>
         <a class="active" href="services.html">Услуги</a>
         <a href="catalog.html">Каталог</a>
-        <a href="index.html#advantages">Преимущества</a>
-        <a href="index.html#process">Процесс работы</a>
+        <a href="portfolio.html">Портфолио</a>
+        <a href="request.html">Заявка</a>
         <a href="contacts.html">Контакты</a>
       </nav>
     </header>
@@ -39,7 +43,7 @@
             Мастерская выполняет работы с ювелирными изделиями: от простого
             ремонта до изготовления украшений по индивидуальному заказу.
           </p>
-          <a class="primary-button" href="contacts.html">Связаться с мастером</a>
+          <a class="primary-button" href="request.html">Оставить заявку</a>
         </div>
       </section>
 
@@ -86,7 +90,16 @@
     </main>
 
     <footer class="site-footer">
-      <span>Калинин Александр Сергеевич</span>
+      <div class="footer-inner">
+        <span>Калинин Александр Сергеевич</span>
+        <div class="footer-links" aria-label="Дополнительная навигация">
+          <a href="prices.html">Цены</a>
+          <a href="materials.html">Материалы</a>
+          <a href="warranty.html">Гарантия</a>
+          <a href="care.html">Уход</a>
+          <a href="faq.html">FAQ</a>
+        </div>
+      </div>
     </footer>
 
     <script src="static/js/main.js"></script>

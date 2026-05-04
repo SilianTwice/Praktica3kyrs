@@ -16,13 +16,17 @@
         </span>
       </a>
 
-      <nav class="main-nav" aria-label="Основное меню">
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="main-nav">
+        Меню
+      </button>
+
+      <nav id="main-nav" class="main-nav" aria-label="Основное меню">
         <a href="about.html">О мастерской</a>
         <a class="active" href="index.html">Главная</a>
         <a href="services.html">Услуги</a>
         <a href="catalog.html">Каталог</a>
-        <a href="#advantages">Преимущества</a>
-        <a href="#process">Процесс работы</a>
+        <a href="portfolio.html">Портфолио</a>
+        <a href="request.html">Заявка</a>
         <a href="contacts.html">Контакты</a>
       </nav>
     </header>
@@ -39,7 +43,7 @@
             Изготовление украшений, ремонт изделий и консультации по подбору
             материалов для индивидуальных заказов.
           </p>
-          <a class="primary-button" href="contacts.html">Связаться с мастером</a>
+          <a class="primary-button" href="request.html">Оставить заявку</a>
         </div>
       </section>
 
@@ -53,7 +57,7 @@
           <article class="card">
             <h3>Изготовление украшений</h3>
             <p>
-              Индивидуальные кольца, подвески, серьги и браслеты по эскизу
+              Индивидуальные кольца, подвески и серьги по эскизу
               клиента или по дизайну мастерской.
             </p>
           </article>
@@ -123,6 +127,39 @@
         </ol>
       </section>
 
+      <section class="section">
+        <div class="section-heading">
+          <p class="eyebrow">Разделы</p>
+          <h2>Что можно посмотреть на сайте</h2>
+        </div>
+
+        <div class="cards cards-four">
+          <article class="card">
+            <h3>Каталог</h3>
+            <p>Примеры изделий и ориентировочные цены.</p>
+            <a class="text-link" href="catalog.html">Перейти</a>
+          </article>
+
+          <article class="card">
+            <h3>Материалы</h3>
+            <p>Краткая информация о металлах и вставках.</p>
+            <a class="text-link" href="materials.html">Перейти</a>
+          </article>
+
+          <article class="card">
+            <h3>Уход</h3>
+            <p>Рекомендации по хранению и чистке украшений.</p>
+            <a class="text-link" href="care.html">Перейти</a>
+          </article>
+
+          <article class="card">
+            <h3>Вопросы</h3>
+            <p>Ответы на частые вопросы клиентов.</p>
+            <a class="text-link" href="faq.html">Перейти</a>
+          </article>
+        </div>
+      </section>
+
       <section id="contacts" class="section contact-section">
         <div>
           <p class="eyebrow">Обратная связь</p>
@@ -138,7 +175,16 @@
     </main>
 
     <footer class="site-footer">
-      <span>Калинин Александр Сергеевич</span>
+      <div class="footer-inner">
+        <span>Калинин Александр Сергеевич</span>
+        <div class="footer-links" aria-label="Дополнительная навигация">
+          <a href="prices.html">Цены</a>
+          <a href="materials.html">Материалы</a>
+          <a href="warranty.html">Гарантия</a>
+          <a href="care.html">Уход</a>
+          <a href="faq.html">FAQ</a>
+        </div>
+      </div>
     </footer>
 
     <script src="static/js/main.js"></script>
