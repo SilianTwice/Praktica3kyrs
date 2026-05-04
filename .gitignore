@@ -2,3 +2,7 @@ report_tmp/
 desktop-*.png
 mobile-*.png
 Практика_копия_ювелирная_мастерская.docx
+data/*.db
+data/*.sqlite
+__pycache__/
+.venv/

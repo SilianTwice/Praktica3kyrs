@@ -22,12 +22,24 @@ if (navToggle) {
 const requestForm = document.querySelector("[data-request-form]");
 
 if (requestForm) {
-  requestForm.addEventListener("submit", (event) => {
-    event.preventDefault();
+  const result = requestForm.querySelector("[data-form-result]");
+  const status = new URLSearchParams(window.location.search).get("status");
 
-    const result = requestForm.querySelector("[data-form-result]");
-    if (result) {
-      result.textContent = "Заявка подготовлена. На следующем этапе её можно будет сохранять в базе данных.";
-    }
-  });
+  if (result && status === "sent") {
+    result.textContent = "Заявка сохранена. Мастер сможет увидеть её в разделе администрирования.";
+  }
+
+  if (result && status === "error") {
+    result.textContent = "Заполните имя и контакт для связи.";
+  }
+
+  if (window.location.protocol === "file:") {
+    requestForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+
+      if (result) {
+        result.textContent = "Для сохранения заявки откройте сайт через Flask-сервер.";
+      }
+    });
+  }
 }

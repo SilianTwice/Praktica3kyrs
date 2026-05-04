@@ -52,7 +52,7 @@
           <h2>Оставить заявку</h2>
         </div>
 
-        <form class="request-form" data-request-form>
+        <form class="request-form" action="/request" method="post" data-request-form>
           <div class="form-grid">
             <div class="form-field">
               <label for="client-name">Имя</label>
@@ -86,7 +86,7 @@
           </div>
 
           <button class="primary-button" type="submit">Отправить заявку</button>
-          <p class="form-note" data-form-result>Сейчас форма работает как статический пример без отправки на сервер.</p>
+          <p class="form-note" data-form-result>При запуске через Flask форма сохраняет заявку в базе SQLite.</p>
         </form>
       </section>
     </main>

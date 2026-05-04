@@ -310,6 +310,30 @@ h3 {
   color: var(--muted);
 }
 
+.table-wrap {
+  overflow-x: auto;
+}
+
+.requests-table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+  background: #fff;
+}
+
+.requests-table th,
+.requests-table td {
+  border: 1px solid var(--line);
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.requests-table th {
+  background: #edf3f1;
+  color: var(--primary-dark);
+}
+
 .site-footer {
   width: min(1180px, calc(100% - 32px));
   margin: 0 auto;
