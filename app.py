@@ -72,6 +72,16 @@ def index():
     return send_from_directory(BASE_DIR, "index.html")
 
 
+@app.route("/favicon.svg")
+def favicon_svg():
+    return send_from_directory(BASE_DIR, "favicon.svg", mimetype="image/svg+xml")
+
+
+@app.route("/favicon.ico")
+def favicon_ico():
+    return send_from_directory(BASE_DIR, "favicon.svg", mimetype="image/svg+xml")
+
+
 @app.route("/request", methods=["POST"])
 def create_request():
     client_name = request.form.get("client-name", "").strip()
@@ -208,6 +218,7 @@ def admin_requests():
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Заявки | Ювелирная мастерская</title>
     <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   </head>
   <body>
     <header class="site-header">
