@@ -4,5 +4,6 @@ mobile-*.png
 Практика_копия_ювелирная_мастерская.docx
 data/*.db
 data/*.sqlite
+static/uploads/*
 __pycache__/
 .venv/
