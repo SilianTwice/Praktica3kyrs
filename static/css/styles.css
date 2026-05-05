@@ -423,6 +423,30 @@ h3 {
   line-height: 1;
 }
 
+.admin-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.filter-link {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 12px;
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.filter-link:hover,
+.filter-link.active {
+  border-color: rgba(240, 211, 138, 0.5);
+  background: rgba(207, 168, 91, 0.16);
+  color: var(--primary-dark);
+}
+
 .table-wrap {
   overflow-x: auto;
 }

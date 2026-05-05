@@ -127,8 +127,11 @@ def admin_index():
 @app.route("/admin/requests/<int:request_id>/status", methods=["POST"])
 def update_request_status(request_id: int):
     status = request.form.get("status", "new")
+    current_filter = request.form.get("current-filter", "all")
     if status not in REQUEST_STATUSES:
         status = "new"
+    if current_filter not in REQUEST_STATUSES:
+        current_filter = "all"
 
     with get_connection() as connection:
         connection.execute(
@@ -136,11 +139,15 @@ def update_request_status(request_id: int):
             (status, request_id),
         )
 
-    return redirect(url_for("admin_requests"))
+    return redirect(url_for("admin_requests", status=current_filter))
 
 
 @app.route("/admin/requests")
 def admin_requests():
+    active_filter = request.args.get("status", "all")
+    if active_filter not in REQUEST_STATUSES:
+        active_filter = "all"
+
     with get_connection() as connection:
         rows = connection.execute(
             """
@@ -163,6 +170,13 @@ def admin_requests():
         row_status = row["status"] if row["status"] in REQUEST_STATUSES else "new"
         status_counts[row_status] += 1
 
+    filtered_rows = [
+        row
+        for row in rows
+        if active_filter == "all"
+        or (row["status"] if row["status"] in REQUEST_STATUSES else "new") == active_filter
+    ]
+
     status_cards = []
     for status, label in REQUEST_STATUSES.items():
         status_cards.append(
@@ -170,6 +184,15 @@ def admin_requests():
             f'<span class="status-badge status-{status}">{label}</span>'
             f'<strong>{status_counts[status]}</strong>'
             "</div>"
+        )
+
+    filter_options = [("all", "Все заявки"), *REQUEST_STATUSES.items()]
+    filter_links = []
+    for value, label in filter_options:
+        href = "/admin/requests" if value == "all" else f"/admin/requests?status={value}"
+        active_class = " active" if value == active_filter else ""
+        filter_links.append(
+            f'<a class="filter-link{active_class}" href="{href}">{label}</a>'
         )
 
     def render_status_form(row: sqlite3.Row) -> str:
@@ -187,12 +210,13 @@ def admin_requests():
             f'<select name="status" aria-label="Статус заявки {row["id"]}">'
             f"{''.join(options)}"
             "</select>"
+            f'<input type="hidden" name="current-filter" value="{active_filter}">'
             '<button type="submit">Сохранить</button>'
             "</form>"
         )
 
     table_rows = []
-    for row in rows:
+    for row in filtered_rows:
         table_rows.append(
             "<tr>"
             f"<td class=\"request-id\">#{row['id']}</td>"
@@ -208,7 +232,7 @@ def admin_requests():
 
     if not table_rows:
         table_rows.append(
-            '<tr><td colspan="8">Пока нет сохраненных заявок.</td></tr>'
+            '<tr><td colspan="8">Нет заявок для выбранного фильтра.</td></tr>'
         )
 
     return f"""<!doctype html>
@@ -255,6 +279,10 @@ def admin_requests():
 
         <div class="admin-stats" aria-label="Статистика заявок">
           {''.join(status_cards)}
+        </div>
+
+        <div class="admin-filters" aria-label="Фильтр заявок">
+          {''.join(filter_links)}
         </div>
 
         <div class="table-wrap">
