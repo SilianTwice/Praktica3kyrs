@@ -29,6 +29,12 @@ PUBLIC_PAGES = {
 
 app = Flask(__name__)
 
+REQUEST_STATUSES = {
+    "new": "Новая",
+    "in_work": "В работе",
+    "done": "Завершена",
+}
+
 
 def get_connection() -> sqlite3.Connection:
     DATA_DIR.mkdir(exist_ok=True)
@@ -48,10 +54,17 @@ def init_db() -> None:
                 service_type TEXT NOT NULL,
                 budget TEXT,
                 comment TEXT,
+                status TEXT NOT NULL DEFAULT 'new',
                 created_at TEXT NOT NULL
             )
             """
         )
+        columns = connection.execute("PRAGMA table_info(requests)").fetchall()
+        column_names = {column["name"] for column in columns}
+        if "status" not in column_names:
+            connection.execute(
+                "ALTER TABLE requests ADD COLUMN status TEXT NOT NULL DEFAULT 'new'"
+            )
 
 
 @app.route("/")
@@ -101,16 +114,58 @@ def admin_index():
     return redirect(url_for("admin_requests"))
 
 
+@app.route("/admin/requests/<int:request_id>/status", methods=["POST"])
+def update_request_status(request_id: int):
+    status = request.form.get("status", "new")
+    if status not in REQUEST_STATUSES:
+        status = "new"
+
+    with get_connection() as connection:
+        connection.execute(
+            "UPDATE requests SET status = ? WHERE id = ?",
+            (status, request_id),
+        )
+
+    return redirect(url_for("admin_requests"))
+
+
 @app.route("/admin/requests")
 def admin_requests():
     with get_connection() as connection:
         rows = connection.execute(
             """
-            SELECT id, client_name, client_contact, service_type, budget, comment, created_at
+            SELECT
+                id,
+                client_name,
+                client_contact,
+                service_type,
+                budget,
+                comment,
+                status,
+                created_at
             FROM requests
             ORDER BY id DESC
             """
         ).fetchall()
+
+    def render_status_form(row: sqlite3.Row) -> str:
+        options = []
+        current_status = row["status"] if row["status"] in REQUEST_STATUSES else "new"
+        for value, label in REQUEST_STATUSES.items():
+            selected = " selected" if value == current_status else ""
+            options.append(f'<option value="{value}"{selected}>{label}</option>')
+
+        return (
+            f'<form class="status-form" action="/admin/requests/{row["id"]}/status" method="post">'
+            f'<span class="status-badge status-{current_status}">'
+            f"{REQUEST_STATUSES[current_status]}"
+            "</span>"
+            f'<select name="status" aria-label="Статус заявки {row["id"]}">'
+            f"{''.join(options)}"
+            "</select>"
+            '<button type="submit">Сохранить</button>'
+            "</form>"
+        )
 
     table_rows = []
     for row in rows:
@@ -118,6 +173,7 @@ def admin_requests():
             "<tr>"
             f"<td>{row['id']}</td>"
             f"<td>{html.escape(row['created_at'])}</td>"
+            f"<td>{render_status_form(row)}</td>"
             f"<td>{html.escape(row['client_name'])}</td>"
             f"<td>{html.escape(row['client_contact'])}</td>"
             f"<td>{html.escape(row['service_type'])}</td>"
@@ -128,7 +184,7 @@ def admin_requests():
 
     if not table_rows:
         table_rows.append(
-            '<tr><td colspan="7">Пока нет сохраненных заявок.</td></tr>'
+            '<tr><td colspan="8">Пока нет сохраненных заявок.</td></tr>'
         )
 
     return f"""<!doctype html>
@@ -178,6 +234,7 @@ def admin_requests():
               <tr>
                 <th>ID</th>
                 <th>Дата</th>
+                <th>Статус</th>
                 <th>Имя</th>
                 <th>Контакт</th>
                 <th>Услуга</th>
