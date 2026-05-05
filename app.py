@@ -39,6 +39,13 @@ REQUEST_STATUSES = {
     "done": "Завершена",
 }
 
+SERVICE_TYPES = [
+    "Изготовление украшения",
+    "Ремонт изделия",
+    "Полировка и чистка",
+    "Консультация",
+]
+
 
 def get_connection() -> sqlite3.Connection:
     DATA_DIR.mkdir(exist_ok=True)
@@ -49,6 +56,41 @@ def get_connection() -> sqlite3.Connection:
 
 def init_db() -> None:
     with get_connection() as connection:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS request_statuses (
+                code TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                sort_order INTEGER NOT NULL DEFAULT 0
+            )
+            """
+        )
+        connection.executemany(
+            """
+            INSERT OR IGNORE INTO request_statuses (code, name, sort_order)
+            VALUES (?, ?, ?)
+            """,
+            [
+                (code, name, index)
+                for index, (code, name) in enumerate(REQUEST_STATUSES.items(), start=1)
+            ],
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS service_types (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                is_active INTEGER NOT NULL DEFAULT 1
+            )
+            """
+        )
+        connection.executemany(
+            """
+            INSERT OR IGNORE INTO service_types (name)
+            VALUES (?)
+            """,
+            [(name,) for name in SERVICE_TYPES],
+        )
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS requests (
