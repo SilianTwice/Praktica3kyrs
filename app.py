@@ -180,8 +180,6 @@ def admin_login():
 
       <nav id="main-nav" class="main-nav" aria-label="Основное меню">
         <a href="/index.html">Главная</a>
-        <a href="/request.html">Заявка</a>
-        <a class="active" href="/admin/login">Вход</a>
       </nav>
     </header>
 
@@ -361,8 +359,6 @@ def admin_requests():
       </button>
 
       <nav id="main-nav" class="main-nav" aria-label="Основное меню">
-        <a href="/index.html">Главная</a>
-        <a href="/request.html">Заявка</a>
         <a class="active" href="/admin/requests">Заявки</a>
         <form class="nav-logout" action="/admin/logout" method="post">
           <button type="submit">Выйти</button>
