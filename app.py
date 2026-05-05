@@ -148,6 +148,20 @@ def admin_requests():
             """
         ).fetchall()
 
+    status_counts = {status: 0 for status in REQUEST_STATUSES}
+    for row in rows:
+        row_status = row["status"] if row["status"] in REQUEST_STATUSES else "new"
+        status_counts[row_status] += 1
+
+    status_cards = []
+    for status, label in REQUEST_STATUSES.items():
+        status_cards.append(
+            '<div class="admin-stat">'
+            f'<span class="status-badge status-{status}">{label}</span>'
+            f'<strong>{status_counts[status]}</strong>'
+            "</div>"
+        )
+
     def render_status_form(row: sqlite3.Row) -> str:
         options = []
         current_status = row["status"] if row["status"] in REQUEST_STATUSES else "new"
@@ -171,14 +185,14 @@ def admin_requests():
     for row in rows:
         table_rows.append(
             "<tr>"
-            f"<td>{row['id']}</td>"
-            f"<td>{html.escape(row['created_at'])}</td>"
+            f"<td class=\"request-id\">#{row['id']}</td>"
+            f"<td class=\"request-date\">{html.escape(row['created_at'])}</td>"
             f"<td>{render_status_form(row)}</td>"
-            f"<td>{html.escape(row['client_name'])}</td>"
-            f"<td>{html.escape(row['client_contact'])}</td>"
+            f"<td><strong>{html.escape(row['client_name'])}</strong></td>"
+            f"<td class=\"request-contact\">{html.escape(row['client_contact'])}</td>"
             f"<td>{html.escape(row['service_type'])}</td>"
             f"<td>{html.escape(row['budget'] or '-')}</td>"
-            f"<td>{html.escape(row['comment'] or '-')}</td>"
+            f"<td class=\"request-comment\">{html.escape(row['comment'] or '-')}</td>"
             "</tr>"
         )
 
@@ -226,6 +240,10 @@ def admin_requests():
           <p class="eyebrow">Админка</p>
           <h1>Заявки клиентов</h1>
           <p>На этой странице отображаются обращения, сохраненные через форму заявки.</p>
+        </div>
+
+        <div class="admin-stats" aria-label="Статистика заявок">
+          {''.join(status_cards)}
         </div>
 
         <div class="table-wrap">

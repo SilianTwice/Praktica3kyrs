@@ -26,11 +26,13 @@ if (requestForm) {
   const status = new URLSearchParams(window.location.search).get("status");
 
   if (result && status === "sent") {
-    result.textContent = "Заявка сохранена. Мастер сможет увидеть её в разделе администрирования.";
+    result.textContent = "Заявка сохранена. Мастер сможет увидеть её в разделе заявок.";
+    result.classList.add("form-alert-success");
   }
 
   if (result && status === "error") {
     result.textContent = "Заполните имя и контакт для связи.";
+    result.classList.add("form-alert-error");
   }
 
   if (window.location.protocol === "file:") {
@@ -38,7 +40,8 @@ if (requestForm) {
       event.preventDefault();
 
       if (result) {
-        result.textContent = "Для сохранения заявки откройте сайт через Flask-сервер.";
+        result.textContent = "Для сохранения заявки откройте сайт через локальный сервер.";
+        result.classList.add("form-alert-error");
       }
     });
   }

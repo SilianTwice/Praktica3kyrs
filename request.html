@@ -52,42 +52,57 @@
           <h2>Оставить заявку</h2>
         </div>
 
-        <form class="request-form" action="/request" method="post" data-request-form>
-          <div class="form-grid">
-            <div class="form-field">
-              <label for="client-name">Имя</label>
-              <input id="client-name" name="client-name" type="text" required>
+        <div class="request-layout">
+          <form class="request-form" action="/request" method="post" data-request-form>
+            <div class="form-grid">
+              <div class="form-field">
+                <label for="client-name">Имя</label>
+                <input id="client-name" name="client-name" type="text" required>
+              </div>
+
+              <div class="form-field">
+                <label for="client-contact">Телефон или email</label>
+                <input id="client-contact" name="client-contact" type="text" required>
+              </div>
+
+              <div class="form-field">
+                <label for="service-type">Тип услуги</label>
+                <select id="service-type" name="service-type">
+                  <option>Изготовление украшения</option>
+                  <option>Ремонт изделия</option>
+                  <option>Полировка и чистка</option>
+                  <option>Консультация</option>
+                </select>
+              </div>
+
+              <div class="form-field">
+                <label for="budget">Ориентировочный бюджет</label>
+                <input id="budget" name="budget" type="text" placeholder="например, до 10 000 руб.">
+              </div>
+
+              <div class="form-field form-field-wide">
+                <label for="comment">Описание задачи</label>
+                <textarea id="comment" name="comment" placeholder="Опишите изделие, материал, размер или характер ремонта"></textarea>
+              </div>
             </div>
 
-            <div class="form-field">
-              <label for="client-contact">Телефон или email</label>
-              <input id="client-contact" name="client-contact" type="text" required>
+            <div class="form-actions">
+              <button class="primary-button" type="submit">Отправить заявку</button>
+              <p class="form-note form-alert" data-form-result>
+                После отправки заявка появится в разделе обработки обращений.
+              </p>
             </div>
+          </form>
 
-            <div class="form-field">
-              <label for="service-type">Тип услуги</label>
-              <select id="service-type" name="service-type">
-                <option>Изготовление украшения</option>
-                <option>Ремонт изделия</option>
-                <option>Полировка и чистка</option>
-                <option>Консультация</option>
-              </select>
-            </div>
-
-            <div class="form-field">
-              <label for="budget">Ориентировочный бюджет</label>
-              <input id="budget" name="budget" type="text" placeholder="например, до 10 000 руб.">
-            </div>
-
-            <div class="form-field form-field-wide">
-              <label for="comment">Описание задачи</label>
-              <textarea id="comment" name="comment" placeholder="Опишите изделие, материал, размер или характер ремонта"></textarea>
-            </div>
-          </div>
-
-          <button class="primary-button" type="submit">Отправить заявку</button>
-          <p class="form-note" data-form-result>При запуске через Flask форма сохраняет заявку в базе SQLite.</p>
-        </form>
+          <aside class="request-summary" aria-label="Порядок обработки заявки">
+            <h3>После отправки</h3>
+            <ol class="steps compact-steps">
+              <li>Заявка сохраняется в базе сайта.</li>
+              <li>Мастер просматривает обращение в разделе заявок.</li>
+              <li>Статус меняется по мере обработки заказа.</li>
+            </ol>
+          </aside>
+        </div>
       </section>
     </main>
 
