@@ -113,6 +113,27 @@ body {
   color: var(--primary-dark);
 }
 
+.nav-logout {
+  margin: 0;
+}
+
+.nav-logout button {
+  border: 0;
+  border-radius: 6px;
+  padding: 8px 9px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+.nav-logout button:hover {
+  background: rgba(207, 168, 91, 0.16);
+  color: var(--primary-dark);
+}
+
 main {
   width: calc(100% - 32px);
   max-width: 1180px;
@@ -390,6 +411,15 @@ h3 {
   margin-bottom: 12px;
 }
 
+.login-section {
+  max-width: 560px;
+}
+
+.login-form {
+  display: grid;
+  gap: 16px;
+}
+
 .compact-steps {
   padding-left: 20px;
 }
@@ -654,6 +684,12 @@ h3 {
 
   .main-nav a {
     padding: 10px 12px;
+  }
+
+  .nav-logout button {
+    width: 100%;
+    padding: 10px 12px;
+    text-align: left;
   }
 
   .hero {

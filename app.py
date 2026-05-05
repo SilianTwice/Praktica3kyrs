@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import html
+import os
 import sqlite3
 from datetime import datetime
 from pathlib import Path
 
-from flask import Flask, redirect, request, send_from_directory, url_for
+from flask import Flask, redirect, request, send_from_directory, session, url_for
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -28,6 +29,9 @@ PUBLIC_PAGES = {
 }
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY", "practice-admin-session-key")
+
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin")
 
 REQUEST_STATUSES = {
     "new": "Новая",
@@ -65,6 +69,14 @@ def init_db() -> None:
             connection.execute(
                 "ALTER TABLE requests ADD COLUMN status TEXT NOT NULL DEFAULT 'new'"
             )
+
+
+def is_admin_logged_in() -> bool:
+    return session.get("admin_logged_in") is True
+
+
+def admin_redirect():
+    return redirect(url_for("admin_login", next=request.full_path.rstrip("?")))
 
 
 @app.route("/")
@@ -124,8 +136,95 @@ def admin_index():
     return redirect(url_for("admin_requests"))
 
 
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login():
+    next_page = request.args.get("next") or request.form.get("next") or url_for("admin_requests")
+    if not next_page.startswith("/admin"):
+        next_page = url_for("admin_requests")
+
+    error_message = ""
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        if password == ADMIN_PASSWORD:
+            session["admin_logged_in"] = True
+            return redirect(next_page)
+
+        error_message = (
+            '<p class="form-note form-alert form-alert-error">'
+            "Неверный пароль администратора."
+            "</p>"
+        )
+
+    return f"""<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Вход администратора | Ювелирная мастерская</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/index.html" aria-label="Главная страница">
+        <span class="brand-mark">ЮМ</span>
+        <span>
+          <strong>Ювелирная мастерская</strong>
+          <small>изготовление и ремонт ювелирных украшений</small>
+        </span>
+      </a>
+
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="main-nav">
+        Меню
+      </button>
+
+      <nav id="main-nav" class="main-nav" aria-label="Основное меню">
+        <a href="/index.html">Главная</a>
+        <a href="/request.html">Заявка</a>
+        <a class="active" href="/admin/login">Вход</a>
+      </nav>
+    </header>
+
+    <main>
+      <nav class="breadcrumbs" aria-label="Хлебные крошки">
+        <span>Администрирование / Вход</span>
+      </nav>
+
+      <section class="section contact-section login-section">
+        <div class="section-heading">
+          <p class="eyebrow">Админка</p>
+          <h1>Вход администратора</h1>
+          <p>Введите пароль, чтобы открыть список клиентских заявок.</p>
+        </div>
+
+        <form class="login-form" action="/admin/login" method="post">
+          <input type="hidden" name="next" value="{html.escape(next_page)}">
+          <div class="form-field">
+            <label for="admin-password">Пароль</label>
+            <input id="admin-password" name="password" type="password" required>
+          </div>
+          <button class="primary-button" type="submit">Войти</button>
+          {error_message}
+        </form>
+      </section>
+    </main>
+
+    <script src="/static/js/main.js"></script>
+  </body>
+</html>"""
+
+
+@app.route("/admin/logout", methods=["POST"])
+def admin_logout():
+    session.pop("admin_logged_in", None)
+    return redirect(url_for("admin_login"))
+
+
 @app.route("/admin/requests/<int:request_id>/status", methods=["POST"])
 def update_request_status(request_id: int):
+    if not is_admin_logged_in():
+        return admin_redirect()
+
     status = request.form.get("status", "new")
     current_filter = request.form.get("current-filter", "all")
     if status not in REQUEST_STATUSES:
@@ -144,6 +243,9 @@ def update_request_status(request_id: int):
 
 @app.route("/admin/requests")
 def admin_requests():
+    if not is_admin_logged_in():
+        return admin_redirect()
+
     active_filter = request.args.get("status", "all")
     if active_filter not in REQUEST_STATUSES:
         active_filter = "all"
@@ -262,6 +364,9 @@ def admin_requests():
         <a href="/index.html">Главная</a>
         <a href="/request.html">Заявка</a>
         <a class="active" href="/admin/requests">Заявки</a>
+        <form class="nav-logout" action="/admin/logout" method="post">
+          <button type="submit">Выйти</button>
+        </form>
       </nav>
     </header>
 
