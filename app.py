@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 import html
+import io
 import os
 import random
 import sqlite3
 import uuid
+import zipfile
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
+from xml.sax.saxutils import escape as xml_escape
 
-from flask import Flask, redirect, request, send_from_directory, session, url_for
+from flask import Flask, make_response, redirect, request, send_from_directory, session, url_for
+from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 
@@ -265,6 +269,30 @@ def render_home_gallery_cards(items: list[dict[str, str]]) -> str:
     return "".join(cards)
 
 
+def current_user_id() -> int | None:
+    user_id = session.get("user_id")
+    return user_id if isinstance(user_id, int) else None
+
+
+def is_user_logged_in() -> bool:
+    return current_user_id() is not None
+
+
+def get_current_user() -> sqlite3.Row | None:
+    user_id = current_user_id()
+    if user_id is None:
+        return None
+    with get_connection() as connection:
+        return connection.execute(
+            "SELECT id, name, email, role, created_at FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+
+
+def client_redirect():
+    return redirect(url_for("login", next=request.full_path.rstrip("?")))
+
+
 def render_public_header(active_page: str) -> str:
     links = [
         ("about.html", "О мастерской", "about"),
@@ -275,6 +303,11 @@ def render_public_header(active_page: str) -> str:
         ("request.html", "Заявка", "request"),
         ("contacts.html", "Контакты", "contacts"),
     ]
+    if is_user_logged_in():
+        links.append(("cabinet", "Личный кабинет", "cabinet"))
+    else:
+        links.append(("login", "Вход", "login"))
+
     nav_links = []
     for href, label, key in links:
         active_class = ' class="active"' if key == active_page else ""
@@ -446,6 +479,18 @@ def init_db() -> None:
         )
         connection.execute(
             """
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'client',
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
             CREATE TABLE IF NOT EXISTS catalog_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT NOT NULL,
@@ -527,6 +572,7 @@ def init_db() -> None:
                 service_type TEXT NOT NULL,
                 budget TEXT,
                 comment TEXT,
+                user_id INTEGER,
                 status TEXT NOT NULL DEFAULT 'new',
                 created_at TEXT NOT NULL
             )
@@ -538,6 +584,20 @@ def init_db() -> None:
             connection.execute(
                 "ALTER TABLE requests ADD COLUMN status TEXT NOT NULL DEFAULT 'new'"
             )
+        if "user_id" not in column_names:
+            connection.execute("ALTER TABLE requests ADD COLUMN user_id INTEGER")
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS request_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                request_id INTEGER NOT NULL,
+                sender_type TEXT NOT NULL,
+                sender_name TEXT NOT NULL,
+                message TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
 
 
 def is_admin_logged_in() -> bool:
@@ -546,6 +606,180 @@ def is_admin_logged_in() -> bool:
 
 def admin_redirect():
     return redirect(url_for("admin_login", next=request.full_path.rstrip("?")))
+
+
+def get_request_by_id(request_id: int) -> sqlite3.Row | None:
+    with get_connection() as connection:
+        return connection.execute(
+            """
+            SELECT
+                requests.*,
+                users.email AS user_email
+            FROM requests
+            LEFT JOIN users ON users.id = requests.user_id
+            WHERE requests.id = ?
+            """,
+            (request_id,),
+        ).fetchone()
+
+
+def get_client_request(request_id: int, user: sqlite3.Row) -> sqlite3.Row | None:
+    with get_connection() as connection:
+        return connection.execute(
+            """
+            SELECT *
+            FROM requests
+            WHERE id = ?
+              AND (user_id = ? OR client_contact = ?)
+            """,
+            (request_id, user["id"], user["email"]),
+        ).fetchone()
+
+
+def get_request_messages(request_id: int) -> list[sqlite3.Row]:
+    with get_connection() as connection:
+        return connection.execute(
+            """
+            SELECT *
+            FROM request_messages
+            WHERE request_id = ?
+            ORDER BY id ASC
+            """,
+            (request_id,),
+        ).fetchall()
+
+
+def add_request_message(
+    request_id: int,
+    sender_type: str,
+    sender_name: str,
+    message: str,
+) -> None:
+    with get_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO request_messages (
+                request_id,
+                sender_type,
+                sender_name,
+                message,
+                created_at
+            )
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                request_id,
+                sender_type,
+                sender_name,
+                message,
+                datetime.now().strftime("%d.%m.%Y %H:%M"),
+            ),
+        )
+
+
+def render_message_list(messages: list[sqlite3.Row]) -> str:
+    if not messages:
+        return '<p class="form-note">Сообщений по этой заявке пока нет.</p>'
+
+    rendered_messages = []
+    for message in messages:
+        sender_type = "admin" if message["sender_type"] == "admin" else "client"
+        rendered_messages.append(
+            f"""
+          <article class="message-card message-{sender_type}">
+            <div class="message-meta">
+              <strong>{escape(message['sender_name'])}</strong>
+              <span>{escape(message['created_at'])}</span>
+            </div>
+            <p>{escape(message['message'])}</p>
+          </article>
+"""
+        )
+    return "".join(rendered_messages)
+
+
+def docx_paragraph(text: str) -> str:
+    return f"<w:p><w:r><w:t>{xml_escape(text)}</w:t></w:r></w:p>"
+
+
+def build_request_docx(row: sqlite3.Row, messages: list[sqlite3.Row]) -> bytes:
+    status = REQUEST_STATUSES.get(row["status"], REQUEST_STATUSES["new"])
+    paragraphs = [
+        docx_paragraph("Заявка ювелирной мастерской"),
+        docx_paragraph(f"Номер заявки: {row['id']}"),
+        docx_paragraph(f"Дата создания: {row['created_at']}"),
+        docx_paragraph(f"Статус: {status}"),
+        docx_paragraph(f"Клиент: {row['client_name']}"),
+        docx_paragraph(f"Контакт: {row['client_contact']}"),
+        docx_paragraph(f"Услуга: {row['service_type']}"),
+        docx_paragraph(f"Бюджет: {row['budget'] or '-'}"),
+        docx_paragraph(f"Комментарий: {row['comment'] or '-'}"),
+        docx_paragraph("Сообщения по заявке:"),
+    ]
+
+    if messages:
+        for message in messages:
+            paragraphs.append(
+                docx_paragraph(
+                    f"{message['created_at']} - {message['sender_name']}: {message['message']}"
+                )
+            )
+    else:
+        paragraphs.append(docx_paragraph("Сообщений пока нет."))
+
+    document_xml = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    {''.join(paragraphs)}
+    <w:sectPr>
+      <w:pgSz w:w="11906" w:h="16838"/>
+      <w:pgMar w:top="1134" w:right="850" w:bottom="1134" w:left="1134"/>
+    </w:sectPr>
+  </w:body>
+</w:document>"""
+    content_types = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+  <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+  <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+</Types>"""
+    rels = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>"""
+    core = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <dc:title>Заявка {row['id']}</dc:title>
+  <dc:creator>Ювелирная мастерская</dc:creator>
+  <cp:lastModifiedBy>Ювелирная мастерская</cp:lastModifiedBy>
+</cp:coreProperties>"""
+    app_props = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+  <Application>Flask</Application>
+</Properties>"""
+
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", content_types)
+        archive.writestr("_rels/.rels", rels)
+        archive.writestr("word/document.xml", document_xml)
+        archive.writestr("docProps/core.xml", core)
+        archive.writestr("docProps/app.xml", app_props)
+    return output.getvalue()
+
+
+def request_docx_response(row: sqlite3.Row) -> object:
+    messages = get_request_messages(row["id"])
+    response = make_response(build_request_docx(row, messages))
+    response.headers["Content-Type"] = (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    response.headers["Content-Disposition"] = (
+        f"attachment; filename=request_{row['id']}.docx"
+    )
+    return response
 
 
 @app.route("/")
@@ -743,12 +977,13 @@ def create_request():
     service_type = request.form.get("service-type", "").strip()
     budget = request.form.get("budget", "").strip()
     comment = request.form.get("comment", "").strip()
+    user_id = current_user_id()
 
     if not client_name or not client_contact:
         return redirect(url_for("serve_page", page_name="request.html", status="error"))
 
     with get_connection() as connection:
-        connection.execute(
+        cursor = connection.execute(
             """
             INSERT INTO requests (
                 client_name,
@@ -756,9 +991,10 @@ def create_request():
                 service_type,
                 budget,
                 comment,
+                user_id,
                 created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 client_name,
@@ -766,11 +1002,314 @@ def create_request():
                 service_type,
                 budget,
                 comment,
+                user_id,
                 datetime.now().strftime("%d.%m.%Y %H:%M"),
             ),
         )
 
+    if user_id is not None:
+        return redirect(url_for("cabinet_request_detail", request_id=cursor.lastrowid))
+
     return redirect(url_for("serve_page", page_name="request.html", status="sent"))
+
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    error_message = ""
+    name = ""
+    email = ""
+
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
+
+        if not name or not email or len(password) < 4:
+            error_message = (
+                '<p class="form-note form-alert form-alert-error">'
+                "Заполните имя, email и пароль не короче 4 символов."
+                "</p>"
+            )
+        else:
+            try:
+                with get_connection() as connection:
+                    cursor = connection.execute(
+                        """
+                        INSERT INTO users (
+                            name,
+                            email,
+                            password_hash,
+                            role,
+                            created_at
+                        )
+                        VALUES (?, ?, ?, 'client', ?)
+                        """,
+                        (
+                            name,
+                            email,
+                            generate_password_hash(password),
+                            datetime.now().strftime("%d.%m.%Y %H:%M"),
+                        ),
+                    )
+                session["user_id"] = cursor.lastrowid
+                session["user_name"] = name
+                return redirect(url_for("cabinet"))
+            except sqlite3.IntegrityError:
+                error_message = (
+                    '<p class="form-note form-alert form-alert-error">'
+                    "Пользователь с таким email уже зарегистрирован."
+                    "</p>"
+                )
+
+    content = f"""
+      <section class="section contact-section login-section">
+        <div class="section-heading">
+          <p class="eyebrow">Кабинет клиента</p>
+          <h1>Регистрация</h1>
+          <p>Создайте аккаунт, чтобы видеть историю заявок, отслеживать статус и вести переписку по заказу.</p>
+        </div>
+
+        <form class="login-form" action="/register" method="post">
+          <div class="form-field">
+            <label for="register-name">Имя</label>
+            <input id="register-name" name="name" value="{escape(name)}" required>
+          </div>
+          <div class="form-field">
+            <label for="register-email">Email</label>
+            <input id="register-email" name="email" type="email" value="{escape(email)}" required>
+          </div>
+          <div class="form-field">
+            <label for="register-password">Пароль</label>
+            <input id="register-password" name="password" type="password" minlength="4" required>
+          </div>
+          <button class="primary-button" type="submit">Зарегистрироваться</button>
+          <p class="form-note">Уже есть аккаунт? <a class="text-link" href="/login">Войти</a></p>
+          {error_message}
+        </form>
+      </section>
+"""
+    return render_page("Регистрация", "login", "Регистрация", content)
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    next_page = request.args.get("next") or request.form.get("next") or url_for("cabinet")
+    if not next_page.startswith("/") or next_page.startswith("//"):
+        next_page = url_for("cabinet")
+
+    error_message = ""
+    email = ""
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
+
+        with get_connection() as connection:
+            user = connection.execute(
+                "SELECT * FROM users WHERE email = ?",
+                (email,),
+            ).fetchone()
+
+        if user and check_password_hash(user["password_hash"], password):
+            session["user_id"] = user["id"]
+            session["user_name"] = user["name"]
+            return redirect(next_page)
+
+        error_message = (
+            '<p class="form-note form-alert form-alert-error">'
+            "Неверный email или пароль."
+            "</p>"
+        )
+
+    content = f"""
+      <section class="section contact-section login-section">
+        <div class="section-heading">
+          <p class="eyebrow">Кабинет клиента</p>
+          <h1>Вход клиента</h1>
+          <p>После входа можно посмотреть свои заявки, статус обработки и переписку с мастерской.</p>
+        </div>
+
+        <form class="login-form" action="/login" method="post">
+          <input type="hidden" name="next" value="{escape(next_page)}">
+          <div class="form-field">
+            <label for="login-email">Email</label>
+            <input id="login-email" name="email" type="email" value="{escape(email)}" required>
+          </div>
+          <div class="form-field">
+            <label for="login-password">Пароль</label>
+            <input id="login-password" name="password" type="password" required>
+          </div>
+          <button class="primary-button" type="submit">Войти</button>
+          <p class="form-note">Нет аккаунта? <a class="text-link" href="/register">Зарегистрироваться</a></p>
+          {error_message}
+        </form>
+      </section>
+"""
+    return render_page("Вход клиента", "login", "Вход", content)
+
+
+@app.route("/logout", methods=["POST"])
+def logout():
+    session.pop("user_id", None)
+    session.pop("user_name", None)
+    return redirect(url_for("index"))
+
+
+@app.route("/cabinet")
+def cabinet():
+    user = get_current_user()
+    if user is None:
+        return client_redirect()
+
+    with get_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT
+                requests.*,
+                COUNT(request_messages.id) AS message_count
+            FROM requests
+            LEFT JOIN request_messages ON request_messages.request_id = requests.id
+            WHERE requests.user_id = ?
+               OR requests.client_contact = ?
+            GROUP BY requests.id
+            ORDER BY requests.id DESC
+            """,
+            (user["id"], user["email"]),
+        ).fetchall()
+
+    table_rows = []
+    for row in rows:
+        status = row["status"] if row["status"] in REQUEST_STATUSES else "new"
+        table_rows.append(
+            "<tr>"
+            f"<td class=\"request-id\">#{row['id']}</td>"
+            f"<td>{escape(row['created_at'])}</td>"
+            f"<td><span class=\"status-badge status-{status}\">{REQUEST_STATUSES[status]}</span></td>"
+            f"<td>{escape(row['service_type'])}</td>"
+            f"<td>{escape(row['budget'] or '-')}</td>"
+            f"<td>{row['message_count']}</td>"
+            f"<td><a class=\"text-link\" href=\"/cabinet/requests/{row['id']}\">Открыть</a></td>"
+            "</tr>"
+        )
+
+    if not table_rows:
+        table_rows.append(
+            '<tr><td colspan="7">У вас пока нет заявок. Можно оставить первую заявку через форму сайта.</td></tr>'
+        )
+
+    content = f"""
+      <section class="section contact-section">
+        <div class="section-heading">
+          <p class="eyebrow">Кабинет клиента</p>
+          <h1>История заявок</h1>
+          <p>Здравствуйте, {escape(user['name'])}. Здесь отображаются ваши обращения, статусы и переписка по заказам.</p>
+        </div>
+
+        <div class="auth-actions">
+          <a class="primary-button" href="/request.html">Оставить заявку</a>
+          <form action="/logout" method="post">
+            <button class="secondary-button" type="submit">Выйти</button>
+          </form>
+        </div>
+
+        <div class="table-wrap">
+          <table class="requests-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Дата</th>
+                <th>Статус</th>
+                <th>Услуга</th>
+                <th>Бюджет</th>
+                <th>Сообщений</th>
+                <th>Действие</th>
+              </tr>
+            </thead>
+            <tbody>
+              {''.join(table_rows)}
+            </tbody>
+          </table>
+        </div>
+      </section>
+"""
+    return render_page("Личный кабинет", "cabinet", "Личный кабинет", content)
+
+
+@app.route("/cabinet/requests/<int:request_id>")
+def cabinet_request_detail(request_id: int):
+    user = get_current_user()
+    if user is None:
+        return client_redirect()
+
+    row = get_client_request(request_id, user)
+    if row is None:
+        return "Заявка не найдена", 404
+
+    status = row["status"] if row["status"] in REQUEST_STATUSES else "new"
+    messages = get_request_messages(request_id)
+    content = f"""
+      <section class="section contact-section">
+        <div class="section-heading">
+          <p class="eyebrow">Заявка #{row['id']}</p>
+          <h1>{escape(row['service_type'])}</h1>
+          <p>Текущий статус: <span class="status-badge status-{status}">{REQUEST_STATUSES[status]}</span></p>
+        </div>
+
+        <div class="detail-grid">
+          <div class="detail-card">
+            <h3>Данные заявки</h3>
+            <p><strong>Дата:</strong> {escape(row['created_at'])}</p>
+            <p><strong>Клиент:</strong> {escape(row['client_name'])}</p>
+            <p><strong>Контакт:</strong> {escape(row['client_contact'])}</p>
+            <p><strong>Бюджет:</strong> {escape(row['budget'] or '-')}</p>
+            <p><strong>Комментарий:</strong> {escape(row['comment'] or '-')}</p>
+            <a class="secondary-button" href="/cabinet/requests/{row['id']}/document">Скачать документ</a>
+          </div>
+
+          <div class="detail-card">
+            <h3>Переписка по заявке</h3>
+            <div class="message-list">
+              {render_message_list(messages)}
+            </div>
+            <form class="message-form" action="/cabinet/requests/{row['id']}/message" method="post">
+              <div class="form-field">
+                <label for="client-message">Сообщение</label>
+                <textarea id="client-message" name="message" required></textarea>
+              </div>
+              <button class="primary-button" type="submit">Отправить</button>
+            </form>
+          </div>
+        </div>
+      </section>
+"""
+    return render_page(f"Заявка #{row['id']}", "cabinet", "Личный кабинет / Заявка", content)
+
+
+@app.route("/cabinet/requests/<int:request_id>/message", methods=["POST"])
+def cabinet_add_message(request_id: int):
+    user = get_current_user()
+    if user is None:
+        return client_redirect()
+
+    row = get_client_request(request_id, user)
+    if row is None:
+        return "Заявка не найдена", 404
+
+    message = request.form.get("message", "").strip()
+    if message:
+        add_request_message(request_id, "client", user["name"], message)
+    return redirect(url_for("cabinet_request_detail", request_id=request_id))
+
+
+@app.route("/cabinet/requests/<int:request_id>/document")
+def cabinet_request_document(request_id: int):
+    user = get_current_user()
+    if user is None:
+        return client_redirect()
+
+    row = get_client_request(request_id, user)
+    if row is None:
+        return "Заявка не найдена", 404
+    return request_docx_response(row)
 
 
 @app.route("/admin")
@@ -1345,12 +1884,13 @@ def admin_requests():
             f"<td>{html.escape(row['service_type'])}</td>"
             f"<td>{html.escape(row['budget'] or '-')}</td>"
             f"<td class=\"request-comment\">{html.escape(row['comment'] or '-')}</td>"
+            f"<td><a class=\"text-link\" href=\"/admin/requests/{row['id']}\">Открыть</a></td>"
             "</tr>"
         )
 
     if not table_rows:
         table_rows.append(
-            '<tr><td colspan="8">Нет заявок для выбранного фильтра.</td></tr>'
+            '<tr><td colspan="9">Нет заявок для выбранного фильтра.</td></tr>'
         )
 
     return f"""<!doctype html>
@@ -1397,6 +1937,7 @@ def admin_requests():
                 <th>Услуга</th>
                 <th>Бюджет</th>
                 <th>Комментарий</th>
+                <th>Действие</th>
               </tr>
             </thead>
             <tbody>
@@ -1422,6 +1963,103 @@ def admin_requests():
 </html>"""
 
 
+@app.route("/admin/requests/<int:request_id>")
+def admin_request_detail(request_id: int):
+    if not is_admin_logged_in():
+        return admin_redirect()
+
+    row = get_request_by_id(request_id)
+    if row is None:
+        return "Заявка не найдена", 404
+
+    current_status = row["status"] if row["status"] in REQUEST_STATUSES else "new"
+    status_options = []
+    for value, label in REQUEST_STATUSES.items():
+        selected = " selected" if value == current_status else ""
+        status_options.append(f'<option value="{value}"{selected}>{label}</option>')
+
+    messages = get_request_messages(request_id)
+    user_info = (
+        f"<p><strong>Аккаунт:</strong> {escape(row['user_email'])}</p>"
+        if row["user_email"]
+        else "<p><strong>Аккаунт:</strong> заявка оставлена без входа</p>"
+    )
+    content = f"""
+      <section class="section contact-section">
+        <div class="section-heading">
+          <p class="eyebrow">Админка</p>
+          <h1>Заявка #{row['id']}</h1>
+          <p>Карточка обращения клиента, переписка и выгрузка заявки в документ.</p>
+        </div>
+
+        <div class="detail-grid">
+          <div class="detail-card">
+            <h3>Данные заявки</h3>
+            <p><strong>Дата:</strong> {escape(row['created_at'])}</p>
+            <p><strong>Клиент:</strong> {escape(row['client_name'])}</p>
+            <p><strong>Контакт:</strong> {escape(row['client_contact'])}</p>
+            {user_info}
+            <p><strong>Услуга:</strong> {escape(row['service_type'])}</p>
+            <p><strong>Бюджет:</strong> {escape(row['budget'] or '-')}</p>
+            <p><strong>Комментарий:</strong> {escape(row['comment'] or '-')}</p>
+
+            <form class="status-form" action="/admin/requests/{row['id']}/status" method="post">
+              <span class="status-badge status-{current_status}">{REQUEST_STATUSES[current_status]}</span>
+              <select name="status" aria-label="Статус заявки {row['id']}">
+                {''.join(status_options)}
+              </select>
+              <input type="hidden" name="current-filter" value="all">
+              <button type="submit">Сохранить статус</button>
+            </form>
+
+            <a class="secondary-button" href="/admin/requests/{row['id']}/document">Скачать документ</a>
+          </div>
+
+          <div class="detail-card">
+            <h3>Чат с клиентом</h3>
+            <div class="message-list">
+              {render_message_list(messages)}
+            </div>
+            <form class="message-form" action="/admin/requests/{row['id']}/message" method="post">
+              <div class="form-field">
+                <label for="admin-message">Сообщение</label>
+                <textarea id="admin-message" name="message" required></textarea>
+              </div>
+              <button class="primary-button" type="submit">Отправить</button>
+            </form>
+          </div>
+        </div>
+      </section>
+"""
+    return render_admin_page(f"Заявка #{row['id']}", "requests", "Заявка", content)
+
+
+@app.route("/admin/requests/<int:request_id>/message", methods=["POST"])
+def admin_add_message(request_id: int):
+    if not is_admin_logged_in():
+        return admin_redirect()
+
+    row = get_request_by_id(request_id)
+    if row is None:
+        return "Заявка не найдена", 404
+
+    message = request.form.get("message", "").strip()
+    if message:
+        add_request_message(request_id, "admin", "Администратор", message)
+    return redirect(url_for("admin_request_detail", request_id=request_id))
+
+
+@app.route("/admin/requests/<int:request_id>/document")
+def admin_request_document(request_id: int):
+    if not is_admin_logged_in():
+        return admin_redirect()
+
+    row = get_request_by_id(request_id)
+    if row is None:
+        return "Заявка не найдена", 404
+    return request_docx_response(row)
+
+
 @app.route("/<path:page_name>")
 def serve_page(page_name: str):
     if page_name in PUBLIC_PAGES:
@@ -1432,4 +2070,7 @@ init_db()
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    host = os.environ.get("HOST", "127.0.0.1")
+    port = int(os.environ.get("PORT", "5000"))
+    debug = os.environ.get("FLASK_DEBUG", "0") == "1"
+    app.run(host=host, port=port, debug=debug)
