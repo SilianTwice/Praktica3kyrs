@@ -467,6 +467,9 @@ h3 {
 
 .secondary-button,
 .danger-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 10px 12px;
@@ -475,6 +478,9 @@ h3 {
   cursor: pointer;
   font: inherit;
   font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
 }
 
 .secondary-button:hover {
@@ -660,6 +666,10 @@ h3 {
 .detail-card p {
   color: var(--muted);
   overflow-wrap: break-word;
+}
+
+.detail-card > .secondary-button {
+  margin-top: 12px;
 }
 
 .message-list {

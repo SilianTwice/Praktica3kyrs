@@ -1782,6 +1782,7 @@ def update_request_status(request_id: int):
 
     status = request.form.get("status", "new")
     current_filter = request.form.get("current-filter", "all")
+    return_to = request.form.get("return-to", "list")
     if status not in REQUEST_STATUSES:
         status = "new"
     if current_filter not in REQUEST_STATUSES:
@@ -1792,6 +1793,9 @@ def update_request_status(request_id: int):
             "UPDATE requests SET status = ? WHERE id = ?",
             (status, request_id),
         )
+
+    if return_to == "detail":
+        return redirect(url_for("admin_request_detail", request_id=request_id))
 
     return redirect(url_for("admin_requests", status=current_filter))
 
@@ -2009,6 +2013,7 @@ def admin_request_detail(request_id: int):
                 {''.join(status_options)}
               </select>
               <input type="hidden" name="current-filter" value="all">
+              <input type="hidden" name="return-to" value="detail">
               <button type="submit">Сохранить статус</button>
             </form>
 
